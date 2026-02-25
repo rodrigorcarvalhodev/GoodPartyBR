@@ -1,4 +1,4 @@
-FROM php:8.3-fpm-alpine
+FROM php:8.3-cli-alpine
 
 # -------------------------------------------------------
 # Timezone: America/Sao_Paulo
@@ -19,7 +19,7 @@ RUN apk add --no-cache \
     unzip
 
 # -------------------------------------------------------
-# Dependências de compilação para extensões PHP
+# Dependências de compilação para extensões PHP + Swoole
 # -------------------------------------------------------
 RUN apk add --no-cache \
     freetype-dev \
@@ -29,7 +29,10 @@ RUN apk add --no-cache \
     icu-dev \
     oniguruma-dev \
     libxml2-dev \
-    linux-headers
+    linux-headers \
+    openssl-dev \
+    curl-dev \
+    $PHPIZE_DEPS
 
 # -------------------------------------------------------
 # Extensões PHP exigidas pelo Laravel 11
@@ -48,7 +51,14 @@ RUN docker-php-ext-configure gd \
         zip \
         intl \
         xml \
-        opcache
+        opcache \
+        sockets
+
+# -------------------------------------------------------
+# Swoole (Laravel Octane)
+# -------------------------------------------------------
+RUN pecl install swoole \
+    && docker-php-ext-enable swoole
 
 # -------------------------------------------------------
 # Composer (última versão estável)
@@ -64,12 +74,13 @@ RUN cp /usr/local/etc/php/php.ini-production /usr/local/etc/php/php.ini
 RUN sed -i "s|;date.timezone =|date.timezone = America/Sao_Paulo|" /usr/local/etc/php/php.ini
 
 # -------------------------------------------------------
-# Configuração do OPcache
+# Configuração do OPcache (otimizado para Swoole)
 # -------------------------------------------------------
-RUN echo "opcache.enable=1" >> /usr/local/etc/php/conf.d/docker-php-ext-opcache.ini \
-    && echo "opcache.memory_consumption=128" >> /usr/local/etc/php/conf.d/docker-php-ext-opcache.ini \
-    && echo "opcache.interned_strings_buffer=8" >> /usr/local/etc/php/conf.d/docker-php-ext-opcache.ini \
-    && echo "opcache.max_accelerated_files=10000" >> /usr/local/etc/php/conf.d/docker-php-ext-opcache.ini \
+RUN echo "opcache.enable_cli=1" >> /usr/local/etc/php/conf.d/docker-php-ext-opcache.ini \
+    && echo "opcache.enable=1" >> /usr/local/etc/php/conf.d/docker-php-ext-opcache.ini \
+    && echo "opcache.memory_consumption=256" >> /usr/local/etc/php/conf.d/docker-php-ext-opcache.ini \
+    && echo "opcache.interned_strings_buffer=16" >> /usr/local/etc/php/conf.d/docker-php-ext-opcache.ini \
+    && echo "opcache.max_accelerated_files=20000" >> /usr/local/etc/php/conf.d/docker-php-ext-opcache.ini \
     && echo "opcache.validate_timestamps=0" >> /usr/local/etc/php/conf.d/docker-php-ext-opcache.ini
 
 # -------------------------------------------------------
@@ -87,6 +98,4 @@ RUN chown -R laravel:laravel /var/www/html
 
 USER laravel
 
-EXPOSE 9000
-
-CMD ["php-fpm"]
+EXPOSE 8000
