@@ -84,6 +84,23 @@ RUN echo "opcache.enable_cli=1" >> /usr/local/etc/php/conf.d/docker-php-ext-opca
     && echo "opcache.validate_timestamps=0" >> /usr/local/etc/php/conf.d/docker-php-ext-opcache.ini
 
 # -------------------------------------------------------
+# Supervisor
+# -------------------------------------------------------
+RUN apk add --no-cache supervisor
+
+# Copia nossa config personalizada
+# Supervisor no Alpine procura em /etc/supervisor.d/ por padrão se configurado no supervisord.conf, 
+# mas vamos usar o caminho padrão /etc/supervisor/conf.d/ e garantir que o supervisord.conf inclua ele.
+COPY ./Docker/laravel-worker.conf /etc/supervisor/conf.d/laravel-worker.conf
+
+# Configurar o supervisord.conf base
+RUN mkdir -p /etc/supervisor/conf.d /var/log /var/run \
+    && printf "[supervisord]\nnodaemon=true\nuser=root\nlogfile=/var/log/supervisord.log\npidfile=/var/run/supervisord.pid\n\n[unix_http_server]\nfile=/var/run/supervisord.sock\nchmod=0700\n\n[rpcinterface:supervisor]\nsupervisor.rpcinterface_factory = supervisor.rpcinterface:make_main_rpcinterface\n\n[supervisorctl]\nserverurl=unix:///var/run/supervisord.sock\n\n[include]\nfiles = /etc/supervisor/conf.d/*.conf\n" > /etc/supervisor/supervisord.conf
+
+# O CMD padrão do Docker para rodar o supervisord em foreground
+CMD ["/usr/bin/supervisord", "-n", "-c", "/etc/supervisor/supervisord.conf"]
+
+# -------------------------------------------------------
 # Diretório de trabalho
 # -------------------------------------------------------
 WORKDIR /var/www/html
@@ -94,8 +111,14 @@ WORKDIR /var/www/html
 RUN addgroup -g 1000 laravel \
     && adduser -u 1000 -G laravel -s /bin/bash -D laravel
 
-RUN chown -R laravel:laravel /var/www/html
+# Garantir que o diretório de logs exista e tenha permissões antes de trocar o usuário
+RUN mkdir -p /var/www/html/storage/logs \
+    && chown -R laravel:laravel /var/www/html/storage/logs \
+    && chmod -R 777 /var/www/html/storage/logs \
+    && touch /var/log/supervisord.log \
+    && chown root:root /var/log/supervisord.log \
+    && chmod 666 /var/log/supervisord.log
 
-USER laravel
+RUN chown -R laravel:laravel /var/www/html
 
 EXPOSE 8000

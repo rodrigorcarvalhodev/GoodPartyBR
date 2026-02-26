@@ -8,7 +8,6 @@ services:
       dockerfile: Docker/php/Dockerfile
     container_name: goodparty-app
     restart: unless-stopped
-    command: ["php", "artisan", "octane:start", "--server=swoole", "--host=0.0.0.0", "--port=8000"]
     volumes:
       - ./application:/var/www/html
     depends_on:
